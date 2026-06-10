@@ -1,45 +1,48 @@
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js';
+import {
+  getDatabase,
+  ref,
+  child,
+  get,
+  set,
+} from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js';
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  sendEmailVerification,
+  applyActionCode,
+  onAuthStateChanged,
+  browserLocalPersistence,
+  setPersistence,
+} from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
+
+const firebaseConfig = {
+  apiKey: 'AIzaSyAIsvIYvQENj7LTa0NMQutJ_hEBWaGMz54',
+  authDomain: 'ehya-app-c67f3.firebaseapp.com',
+  databaseURL: 'https://ehya-app-c67f3-default-rtdb.firebaseio.com',
+  projectId: 'ehya-app-c67f3',
+  storageBucket: 'ehya-app-c67f3.firebasestorage.app',
+  messagingSenderId: '1034711162380',
+  appId: '1:1034711162380:web:19f019bbd51ae2efc41829',
+};
+
+const appFirebase = initializeApp(firebaseConfig);
+const auth = getAuth(appFirebase);
+const db = getDatabase(appFirebase);
+auth.languageCode = 'ar';
+setPersistence(auth, browserLocalPersistence).catch(() => {});
+
 const state = {
   role: 'dashboard',
   currentUser: null,
-  token: null,
   reports: [],
   projects: [
-    {
-      id: 1,
-      name: 'توسعة شبكة مياه المدينة',
-      status: 'قيد التنفيذ',
-      funded: 520000,
-      goal: 700000,
-      coords: [24.6877, 46.7219],
-      city: 'الرياض',
-    },
-    {
-      id: 2,
-      name: 'تحديث الطرق الرئيسية',
-      status: 'بحاجة لتمويل',
-      funded: 290000,
-      goal: 480000,
-      coords: [21.4858, 39.1925],
-      city: 'مكة',
-    },
-    {
-      id: 3,
-      name: 'محطة طاقة شمسية',
-      status: 'قيد التنفيذ',
-      funded: 650000,
-      goal: 800000,
-      coords: [24.7743, 46.7386],
-      city: 'الرياض',
-    },
-    {
-      id: 4,
-      name: 'توسعة شبكة الاتصالات',
-      status: 'بحاجة لتمويل',
-      funded: 120000,
-      goal: 280000,
-      coords: [26.3076, 50.0998],
-      city: 'الخبر',
-    },
+    { id: 1, name: 'توسعة شبكة مياه المدينة', status: 'قيد التنفيذ', funded: 520000, goal: 700000, coords: [24.6877, 46.7219], city: 'الرياض' },
+    { id: 2, name: 'تحديث الطرق الرئيسية', status: 'بحاجة لتمويل', funded: 290000, goal: 480000, coords: [21.4858, 39.1925], city: 'مكة' },
+    { id: 3, name: 'محطة طاقة شمسية', status: 'قيد التنفيذ', funded: 650000, goal: 800000, coords: [24.7743, 46.7386], city: 'الرياض' },
+    { id: 4, name: 'توسعة شبكة الاتصالات', status: 'بحاجة لتمويل', funded: 120000, goal: 280000, coords: [26.3076, 50.0998], city: 'الخبر' },
   ],
   reportsMap: null,
   investorMap: null,
@@ -83,6 +86,7 @@ const elements = {
   latitude: document.getElementById('latitude'),
   longitude: document.getElementById('longitude'),
   reportPreview: document.getElementById('reportPreview'),
+  previewMessage: document.getElementById('previewMessage'),
   projectCards: document.getElementById('projectCards'),
   contractorProjects: document.getElementById('contractorProjects'),
   bondRequired: document.getElementById('bondRequired'),
@@ -108,7 +112,7 @@ function toggleTheme() {
 
 function setMessage(node, message, type = 'info') {
   if (!node) return;
-  node.textContent = message;
+  node.innerHTML = message;
   node.classList.remove('hidden');
   node.classList.toggle('alert-message', type === 'error');
   node.classList.toggle('notification', type === 'info');
@@ -119,22 +123,6 @@ function hideMessage(node) {
   node.textContent = '';
   node.classList.add('hidden');
   node.classList.remove('alert-message', 'notification');
-}
-
-async function apiRequest(path, options = {}) {
-  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
-  if (state.token) {
-    headers.Authorization = `Bearer ${state.token}`;
-  }
-  const response = await fetch(path, {
-    ...options,
-    headers,
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(body.message || 'حدث خطأ في الطلب.');
-  }
-  return body;
 }
 
 function showLoginForm() {
@@ -183,10 +171,9 @@ function showAuthOverlay() {
   switchRole('dashboard');
 }
 
-function setSession(token, user) {
-  state.token = token;
+function setSession(user) {
   state.currentUser = user;
-  localStorage.setItem('emaarSession', JSON.stringify({ token, user }));
+  localStorage.setItem('emaarSession', JSON.stringify(user));
   elements.currentUserText.textContent = `مرحباً، ${user.email}`;
   hideAuthOverlay();
   applyUserRoleAccess();
@@ -194,28 +181,40 @@ function setSession(token, user) {
 }
 
 function clearSession() {
-  state.token = null;
   state.currentUser = null;
   localStorage.removeItem('emaarSession');
   elements.currentUserText.textContent = '';
 }
 
-function handleConfirmToken() {
+async function saveUserProfile(uid, email, role) {
+  await set(ref(db, `users/${uid}`), {
+    email,
+    role,
+    createdAt: new Date().toISOString(),
+  });
+}
+
+async function loadUserProfile(uid) {
+  const snapshot = await get(child(ref(db), `users/${uid}`));
+  return snapshot.exists() ? snapshot.val() : null;
+}
+
+async function handleActionLink() {
   const params = new URLSearchParams(window.location.search);
-  const confirmationToken = params.get('confirm');
-  if (!confirmationToken) {
+  const mode = params.get('mode');
+  const oobCode = params.get('oobCode');
+  if (mode !== 'verifyEmail' || !oobCode) {
     return;
   }
-  apiRequest(`/api/confirm?token=${encodeURIComponent(confirmationToken)}`)
-    .then((data) => {
-      setMessage(elements.statusMessage, data.message, 'info');
-    })
-    .catch((error) => {
-      setMessage(elements.statusMessage, error.message || 'فشل تأكيد البريد الإلكتروني.', 'error');
-    })
-    .finally(() => {
-      window.history.replaceState({}, document.title, window.location.pathname);
-    });
+
+  try {
+    await applyActionCode(auth, oobCode);
+    setMessage(elements.statusMessage, 'تم تأكيد البريد الإلكتروني بنجاح. يمكنك تسجيل الدخول الآن.', 'info');
+  } catch (error) {
+    setMessage(elements.statusMessage, 'فشل تأكيد البريد الإلكتروني. الرابط قد يكون منتهيًا أو غير صالح.', 'error');
+  } finally {
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
 }
 
 async function handleLogin(event) {
@@ -227,13 +226,34 @@ async function handleLogin(event) {
   const password = elements.loginPassword.value;
 
   try {
-    const result = await apiRequest('/api/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
+    const credential = await signInWithEmailAndPassword(auth, email, password);
+    const user = credential.user;
+    await user.reload();
+
+    if (!user.emailVerified) {
+      await sendEmailVerification(user, {
+        url: window.location.origin,
+        handleCodeInApp: true,
+      });
+      await firebaseSignOut(auth);
+      setMessage(
+        elements.authAlert,
+        'لم يتم تأكيد بريدك بعد. تم إرسال رابط التحقق مرة أخرى إلى بريدك الإلكتروني.',
+        'error'
+      );
+      return;
+    }
+
+    const profile = await loadUserProfile(user.uid);
+    setSession({
+      uid: user.uid,
+      email: user.email,
+      role: profile?.role || 'reporter',
+      emailVerified: user.emailVerified,
     });
-    setSession(result.token, result.user);
+    setMessage(elements.statusMessage, 'تم تسجيل الدخول بنجاح.', 'info');
   } catch (error) {
-    setMessage(elements.authAlert, error.message, 'error');
+    setMessage(elements.authAlert, 'فشل تسجيل الدخول. تأكد من البريد وكلمة المرور.', 'error');
   }
 }
 
@@ -253,21 +273,29 @@ async function handleRegister(event) {
   }
 
   try {
-    const result = await apiRequest('/api/register', {
-      method: 'POST',
-      body: JSON.stringify({ email, password, role }),
+    const credential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = credential.user;
+    await saveUserProfile(user.uid, email, role);
+    await sendEmailVerification(user, {
+      url: window.location.origin,
+      handleCodeInApp: true,
     });
-    setMessage(elements.authInfo, result.message, 'info');
-    if (result.previewUrl) {
-      elements.authInfo.innerHTML += `<p>للاختبار المحلي، يمكنك فتح الرابط الاختباري: <a href="${result.previewUrl}" target="_blank">عرض رسالة البريد</a></p>`;
-    }
+    await firebaseSignOut(auth);
+
+    setMessage(
+      elements.authInfo,
+      'تم إنشاء الحساب بنجاح. تم إرسال رابط التحقق إلى بريدك الإلكتروني. افتح البريد واضغط على الرابط قبل تسجيل الدخول.',
+      'info'
+    );
     elements.registerForm.reset();
+    showLoginForm();
   } catch (error) {
-    setMessage(elements.authAlert, error.message, 'error');
+    setMessage(elements.authAlert, 'فشل إنشاء الحساب. تحقق من البيانات وحاول مرة أخرى.', 'error');
   }
 }
 
 function handleLogout() {
+  firebaseSignOut(auth).catch(() => {});
   clearSession();
   showAuthOverlay();
   showLoginForm();
@@ -277,12 +305,12 @@ function handleLogout() {
 function loadSession() {
   const stored = localStorage.getItem('emaarSession');
   if (!stored) return false;
+
   try {
     const session = JSON.parse(stored);
-    if (session.token && session.user) {
-      state.token = session.token;
-      state.currentUser = session.user;
-      elements.currentUserText.textContent = `مرحباً، ${session.user.email}`;
+    if (session && session.email && session.role) {
+      state.currentUser = session;
+      elements.currentUserText.textContent = `مرحباً، ${session.email}`;
       return true;
     }
   } catch {
@@ -426,14 +454,12 @@ function loadUserLocation() {
 }
 
 function setupReportForm() {
-  const previewMessage = document.getElementById('previewMessage');
-
-  document.getElementById('reportImage').addEventListener('change', (event) => {
+  elements.reportImage.addEventListener('change', (event) => {
     const file = event.target.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      previewMessage.innerHTML = `<img src="${reader.result}" alt="معاينة التقرير" class="preview-image" />`;
+      elements.previewMessage.innerHTML = `<img src="${reader.result}" alt="معاينة التقرير" class="preview-image" />`;
     };
     reader.readAsDataURL(file);
   });
@@ -448,110 +474,50 @@ function setupReportForm() {
       date: new Date().toLocaleString('ar-EG'),
     };
     state.reports.push(newReport);
-    previewMessage.innerHTML = `تم إنشاء البلاغ بنجاح بتاريخ ${newReport.date}.<br>الوصف: ${description}`;
+    elements.previewMessage.innerHTML = `تم إنشاء البلاغ بنجاح بتاريخ ${newReport.date}.<br>الوصف: ${description}`;
     elements.reportDescription.value = '';
   });
 }
 
 function initAuth() {
-  const hasSession = loadSession();
-  if (hasSession) {
-    applyUserRoleAccess();
-    hideAuthOverlay();
-    switchRole(state.currentUser.role);
-  } else {
-    showAuthOverlay();
-    showLoginForm();
-  }
+  loadSession();
+
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) {
+      clearSession();
+      showAuthOverlay();
+      showLoginForm();
+      return;
+    }
+
+    await user.reload();
+    if (!user.emailVerified) {
+      await firebaseSignOut(auth);
+      setMessage(
+        elements.authAlert,
+        'لم يتم تأكيد بريدك بعد. تحقق من البريد واضغط رابط التأكيد ثم حاول تسجيل الدخول مرة أخرى.',
+        'error'
+      );
+      showAuthOverlay();
+      showLoginForm();
+      return;
+    }
+
+    const profile = await loadUserProfile(user.uid);
+    setSession({
+      uid: user.uid,
+      email: user.email,
+      role: profile?.role || 'reporter',
+      emailVerified: user.emailVerified,
+    });
+    setMessage(elements.statusMessage, 'تم تسجيل الدخول تلقائياً بعد التأكيد.', 'info');
+  });
 
   elements.loginForm.addEventListener('submit', handleLogin);
   elements.registerForm.addEventListener('submit', handleRegister);
   elements.logoutButton.addEventListener('click', handleLogout);
   elements.showLogin.addEventListener('click', showLoginForm);
   elements.showRegister.addEventListener('click', showRegisterForm);
-}
-
-function handleLogin(event) {
-  event.preventDefault();
-  hideMessage(elements.authAlert);
-  hideMessage(elements.authInfo);
-
-  const email = elements.loginEmail.value.trim();
-  const password = elements.loginPassword.value;
-
-  apiRequest('/api/login', {
-    method: 'POST',
-    body: JSON.stringify({ email, password }),
-  })
-    .then((result) => setSession(result.token, result.user))
-    .catch((error) => setMessage(elements.authAlert, error.message, 'error'));
-}
-
-function handleRegister(event) {
-  event.preventDefault();
-  hideMessage(elements.authAlert);
-  hideMessage(elements.authInfo);
-
-  const email = elements.registerEmail.value.trim();
-  const role = elements.registerRole.value;
-  const password = elements.registerPassword.value;
-  const confirmPassword = elements.registerConfirmPassword.value;
-
-  if (password !== confirmPassword) {
-    setMessage(elements.authAlert, 'كلمة المرور وتأكيدها غير متطابقين.', 'error');
-    return;
-  }
-
-  apiRequest('/api/register', {
-    method: 'POST',
-    body: JSON.stringify({ email, password, role }),
-  })
-    .then((result) => {
-      setMessage(elements.authInfo, result.message, 'info');
-      if (result.previewUrl) {
-        elements.authInfo.innerHTML += `<p>للاختبار المحلي، افتح الرابط: <a href="${result.previewUrl}" target="_blank">عرض البريد</a></p>`;
-      }
-      elements.registerForm.reset();
-    })
-    .catch((error) => setMessage(elements.authAlert, error.message, 'error'));
-}
-
-function handleLogout() {
-  clearSession();
-  showAuthOverlay();
-  showLoginForm();
-  setMessage(elements.statusMessage, 'تم تسجيل الخروج بنجاح.', 'info');
-}
-
-function loadSession() {
-  const stored = localStorage.getItem('emaarSession');
-  if (!stored) return false;
-  try {
-    const session = JSON.parse(stored);
-    if (session.token && session.user) {
-      state.token = session.token;
-      state.currentUser = session.user;
-      elements.currentUserText.textContent = `مرحباً، ${session.user.email}`;
-      return true;
-    }
-  } catch {
-    return false;
-  }
-  return false;
-}
-
-function handleConfirmToken() {
-  const params = new URLSearchParams(window.location.search);
-  const confirmationToken = params.get('confirm');
-  if (!confirmationToken) {
-    return;
-  }
-  apiRequest(`/api/confirm?token=${encodeURIComponent(confirmationToken)}`)
-    .then((data) => setMessage(elements.statusMessage, data.message, 'info'))
-    .catch((error) => setMessage(elements.statusMessage, error.message, 'error'))
-    .finally(() => {
-      window.history.replaceState({}, document.title, window.location.pathname);
-    });
 }
 
 function init() {
@@ -562,7 +528,7 @@ function init() {
   renderContractorProjects();
   loadUserLocation();
   setupReportForm();
-  handleConfirmToken();
+  handleActionLink();
   initAuth();
 
   elements.themeToggle.addEventListener('click', toggleTheme);
