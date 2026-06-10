@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>إعمار وبنيان | منصة التمويل الجماعي</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-o9N1j7kPQ3suG4wZr4ukk90H1+4w/5pNl1O0vlpaj+M=" crossorigin="" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <div class="auth-overlay" id="authOverlay">
+      <div class="auth-card">
+        <h2>تسجيل الدخول إلى إعمار وبنيان</h2>
+        <p>استخدم بيانات تجريبية للولوج إلى واجهة المواطن، المتبرع، أو المقاول.</p>
+
+        <form id="loginForm" class="form-card">
+          <label for="loginUsername">اسم المستخدم</label>
+          <input id="loginUsername" type="text" placeholder="مثال: investor1" autocomplete="username" />
+          <label for="loginPassword">كلمة المرور</label>
+          <input id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password" />
+          <div class="auth-actions">
+            <button type="submit" class="primary-btn">دخول</button>
+          </div>
+          <div id="loginAlert" class="alert-message hidden"></div>
+        </form>
+
+        <div class="auth-hint">
+          <strong>حسابات تجريبية</strong>
+          <ul>
+            <li>المواطن: reporter1 / reporter123</li>
+            <li>المتبرع: investor1 / investor123</li>
+            <li>المقاول: contractor1 / contractor123</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">منصة تمويل جماعي للبنية التحتية</p>
+        <h1>إعمار وبنيان</h1>
+        <p class="lead">حل مبتكر لربط المواطنين، المستثمرين، والمقاولين في مشاريع البنية التحتية.</p>
+      </div>
+      <div class="topbar-actions">
+        <span id="currentUserText" class="current-user hidden"></span>
+        <button id="logoutButton" class="icon-btn hidden" aria-label="تسجيل الخروج">⏏️</button>
+        <button id="themeToggle" class="icon-btn" aria-label="تبديل الوضع الليلي والنهاري">🌙</button>
+      </div>
+    </header>
+
+    <section class="role-nav cards-row">
+      <button class="role-button active" data-role="dashboard">لوحة التحكم</button>
+      <button class="role-button" data-role="reporter">المواطن</button>
+      <button class="role-button" data-role="investor">المتبرع</button>
+      <button class="role-button" data-role="contractor">المقاول</button>
+    </section>
+
+    <main>
+      <section class="page-section" id="dashboardView">
+        <div class="stats-grid">
+          <article class="stat-card">
+            <span>عدد المشاريع</span>
+            <strong id="totalProjects">0</strong>
+          </article>
+          <article class="stat-card">
+            <span>إجمالي المبالغ</span>
+            <strong id="totalAmount">0</strong>
+          </article>
+          <article class="stat-card">
+            <span>المشاريع قيد التنفيذ</span>
+            <strong id="activeProjects">0</strong>
+          </article>
+          <article class="stat-card">
+            <span>مشاريع بحاجة لتمويل</span>
+            <strong id="fundingNeeded">0</strong>
+          </article>
+        </div>
+        <div class="dashboard-panel">
+          <div class="dashboard-intro">
+            <h2>نظرة عامة على المشروع</h2>
+            <p>ركز على التمويل، التقدم، ومسارات المنصة لكل دور مستخدم.</p>
+          </div>
+          <div class="dashboard-summary">
+            <div class="summary-card">
+              <h3>آخر المشاريع</h3>
+              <ul id="dashboardProjects" class="summary-list"></ul>
+            </div>
+            <div class="summary-card">
+              <h3>حالة التمويل</h3>
+              <div id="dashboardProgress" class="summary-list"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page-section hidden" id="reporterView">
+        <div class="section-header">
+          <div>
+            <h2>واجهة المواطن</h2>
+            <p>قدّم بلاغاً لمشروع بنية تحتية مع صورة، وصف، وإحداثيات GPS تلقائية.</p>
+          </div>
+        </div>
+        <div class="split-grid">
+          <div class="card">
+            <form id="reportForm" class="form-card">
+              <label>رفع الصورة</label>
+              <input type="file" id="reportImage" accept="image/*" />
+              <label>الوصف</label>
+              <textarea id="reportDescription" rows="5" placeholder="صف الحاجة أو المشكلة هنا..."></textarea>
+              <div class="coords-row">
+                <div>خط العرض: <span id="latitude">--</span></div>
+                <div>خط الطول: <span id="longitude">--</span></div>
+              </div>
+              <button type="submit" class="primary-btn">إرسال البلاغ</button>
+            </form>
+            <div class="report-preview card" id="reportPreview">
+              <h3>معاينة البلاغ</h3>
+              <p id="previewMessage">اختر صورة وأكتب الوصف ثم اضغط إرسال.</p>
+            </div>
+          </div>
+          <div class="card map-card">
+            <h3>خريطة تحديد الموقع</h3>
+            <div id="reporterMap" class="map"></div>
+            <p class="map-note">الخريطة تعرض موقعك الحالي وتسمح بتحديد موقع المشروع تلقائياً.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="page-section hidden" id="investorView">
+        <div class="section-header">
+          <div>
+            <h2>واجهة المتبرع</h2>
+            <p>تصفح المشاريع عبر خريطة تفاعلية وشاهد تقدم التمويل لحظة بلحظة.</p>
+          </div>
+        </div>
+        <div class="split-grid">
+          <div class="card map-card">
+            <h3>خريطة المشاريع</h3>
+            <div id="investorMap" class="map"></div>
+            <p class="map-note">انقر على أي مشروع لعرض حالة التمويل والموقع.</p>
+          </div>
+          <div class="card projects-list">
+            <h3>المشاريع المتاحة</h3>
+            <div id="projectCards"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page-section hidden" id="contractorView">
+        <div class="section-header">
+          <div>
+            <h2>واجهة المقاول</h2>
+            <p>إدارة المشاريع، عرض حالتها المالية، ونظام محفظة التأمين.</p>
+          </div>
+        </div>
+        <div class="split-grid">
+          <div class="card">
+            <h3>محفظة التأمين</h3>
+            <div class="bond-card">
+              <p>يُطلب إيداع <strong>80%</strong> من قيمة المشروع كضمان قبل البدء.</p>
+              <p class="warning-text">في حال الانسحاب، سيتم تطبيق عقوبات تقنية ومالية لحماية الممولين والمجتمع.</p>
+            </div>
+            <div id="contractorProjects"></div>
+          </div>
+          <div class="card insights-card">
+            <h3>الحالة المالية</h3>
+            <div class="insight-item"><span>إجمالي الضمانات المطلوبة</span><strong id="bondRequired">0</strong></div>
+            <div class="insight-item"><span>المشاريع الجاهزة للبدء</span><strong id="readyProjects">0</strong></div>
+            <div class="insight-item"><span>المشاريع المُؤمَّنة</span><strong id="securedProjects">0</strong></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-o+GshC9T8tVnY3Qc+0jv3P7N8BeVfHi+FLkHUVvE0+I=" crossorigin=""></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "emaar-bonyan",
+  "version": "1.0.0",
+  "description": "منصة MVP لتمويل المشاريع الجماعية للبنية التحتية.",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check app.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
