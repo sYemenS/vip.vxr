@@ -539,6 +539,14 @@ function initAuth() {
   elements.showRegister.addEventListener('click', showRegisterForm);
 }
 
+function showAiStudioReadyMessage() {
+  setMessage(
+    elements.statusMessage,
+    'التطبيق جاهز للتشغيل والنشر على AI Studio. استخدم Dockerfile لبناء الصورة ثم انشرها عبر Google AI Studio.',
+    'info'
+  );
+}
+
 function init() {
   initTheme();
   initMaps();
@@ -549,6 +557,7 @@ function init() {
   setupReportForm();
   handleActionLink();
   initAuth();
+  showAiStudioReadyMessage();
 
   elements.themeToggle.addEventListener('click', toggleTheme);
   elements.roleButtons.forEach((button) => {
