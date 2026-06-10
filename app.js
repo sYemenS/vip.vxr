@@ -32,7 +32,9 @@ const appFirebase = initializeApp(firebaseConfig);
 const auth = getAuth(appFirebase);
 const db = getDatabase(appFirebase);
 auth.languageCode = 'ar';
-setPersistence(auth, browserLocalPersistence).catch(() => {});
+setPersistence(auth, browserLocalPersistence).catch((error) => {
+  console.warn('Firebase persistence unavailable:', error.message || error);
+});
 
 const state = {
   role: 'dashboard',
@@ -186,6 +188,32 @@ function clearSession() {
   elements.currentUserText.textContent = '';
 }
 
+function formatAuthError(error) {
+  const code = error?.code || '';
+  switch (code) {
+    case 'auth/email-already-in-use':
+      return 'هذا البريد مستخدم بالفعل.';
+    case 'auth/invalid-email':
+      return 'البريد الإلكتروني غير صالح.';
+    case 'auth/weak-password':
+      return 'كلمة المرور ضعيفة جداً. استخدم 6 أحرف أو أكثر.';
+    case 'auth/wrong-password':
+      return 'كلمة المرور غير صحيحة.';
+    case 'auth/user-not-found':
+      return 'لا يوجد مستخدم بهذا البريد.';
+    case 'auth/user-disabled':
+      return 'تم تعطيل هذا الحساب.';
+    case 'auth/too-many-requests':
+      return 'محاولة دخول كثيرة. حاول مرة أخرى لاحقاً.';
+    case 'auth/invalid-action-code':
+      return 'رابط التأكيد غير صالح أو منتهي.';
+    case 'auth/expired-action-code':
+      return 'رابط التأكيد انتهى. أعد إرسال التأكيد.';
+    default:
+      return error?.message || 'حدث خطأ غير متوقع. حاول مرة أخرى.';
+  }
+}
+
 async function saveUserProfile(uid, email, role) {
   await set(ref(db, `users/${uid}`), {
     email,
@@ -211,7 +239,7 @@ async function handleActionLink() {
     await applyActionCode(auth, oobCode);
     setMessage(elements.statusMessage, 'تم تأكيد البريد الإلكتروني بنجاح. يمكنك تسجيل الدخول الآن.', 'info');
   } catch (error) {
-    setMessage(elements.statusMessage, 'فشل تأكيد البريد الإلكتروني. الرابط قد يكون منتهيًا أو غير صالح.', 'error');
+    setMessage(elements.statusMessage, formatAuthError(error), 'error');
   } finally {
     window.history.replaceState({}, document.title, window.location.pathname);
   }
@@ -224,6 +252,11 @@ async function handleLogin(event) {
 
   const email = elements.loginEmail.value.trim();
   const password = elements.loginPassword.value;
+
+  if (!email || !password) {
+    setMessage(elements.authAlert, 'يرجى إدخال البريد وكلمة المرور.', 'error');
+    return;
+  }
 
   try {
     const credential = await signInWithEmailAndPassword(auth, email, password);
@@ -253,7 +286,7 @@ async function handleLogin(event) {
     });
     setMessage(elements.statusMessage, 'تم تسجيل الدخول بنجاح.', 'info');
   } catch (error) {
-    setMessage(elements.authAlert, 'فشل تسجيل الدخول. تأكد من البريد وكلمة المرور.', 'error');
+    setMessage(elements.authAlert, formatAuthError(error), 'error');
   }
 }
 
@@ -266,6 +299,11 @@ async function handleRegister(event) {
   const role = elements.registerRole.value;
   const password = elements.registerPassword.value;
   const confirmPassword = elements.registerConfirmPassword.value;
+
+  if (!email || !password || !confirmPassword) {
+    setMessage(elements.authAlert, 'يرجى ملء جميع الحقول.', 'error');
+    return;
+  }
 
   if (password !== confirmPassword) {
     setMessage(elements.authAlert, 'كلمة المرور وتأكيدها غير متطابقين.', 'error');
@@ -290,7 +328,7 @@ async function handleRegister(event) {
     elements.registerForm.reset();
     showLoginForm();
   } catch (error) {
-    setMessage(elements.authAlert, 'فشل إنشاء الحساب. تحقق من البيانات وحاول مرة أخرى.', 'error');
+    setMessage(elements.authAlert, formatAuthError(error), 'error');
   }
 }
 
@@ -300,23 +338,6 @@ function handleLogout() {
   showAuthOverlay();
   showLoginForm();
   setMessage(elements.statusMessage, 'تم تسجيل الخروج بنجاح.', 'info');
-}
-
-function loadSession() {
-  const stored = localStorage.getItem('emaarSession');
-  if (!stored) return false;
-
-  try {
-    const session = JSON.parse(stored);
-    if (session && session.email && session.role) {
-      state.currentUser = session;
-      elements.currentUserText.textContent = `مرحباً، ${session.email}`;
-      return true;
-    }
-  } catch {
-    return false;
-  }
-  return false;
 }
 
 function switchRole(role) {
@@ -480,8 +501,6 @@ function setupReportForm() {
 }
 
 function initAuth() {
-  loadSession();
-
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
       clearSession();
@@ -495,7 +514,7 @@ function initAuth() {
       await firebaseSignOut(auth);
       setMessage(
         elements.authAlert,
-        'لم يتم تأكيد بريدك بعد. تحقق من البريد واضغط رابط التأكيد ثم حاول تسجيل الدخول مرة أخرى.',
+        'حسابك موجود لكن البريد غير مؤكد. افتح رابط التحقق في بريدك قبل تسجيل الدخول.',
         'error'
       );
       showAuthOverlay();
@@ -510,7 +529,7 @@ function initAuth() {
       role: profile?.role || 'reporter',
       emailVerified: user.emailVerified,
     });
-    setMessage(elements.statusMessage, 'تم تسجيل الدخول تلقائياً بعد التأكيد.', 'info');
+    setMessage(elements.statusMessage, 'تم تسجيل الدخول بنجاح.', 'info');
   });
 
   elements.loginForm.addEventListener('submit', handleLogin);
