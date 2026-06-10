@@ -1,12 +1,8 @@
 const state = {
   role: 'dashboard',
   currentUser: null,
+  token: null,
   reports: [],
-  users: [
-    { username: 'reporter1', password: 'reporter123', role: 'reporter', name: 'المواطن' },
-    { username: 'investor1', password: 'investor123', role: 'investor', name: 'المتبرع' },
-    { username: 'contractor1', password: 'contractor123', role: 'contractor', name: 'المقاول' },
-  ],
   projects: [
     {
       id: 1,
@@ -51,8 +47,24 @@ const state = {
 };
 
 const elements = {
+  authOverlay: document.getElementById('authOverlay'),
+  loginForm: document.getElementById('loginForm'),
+  registerForm: document.getElementById('registerForm'),
+  loginEmail: document.getElementById('loginEmail'),
+  loginPassword: document.getElementById('loginPassword'),
+  registerEmail: document.getElementById('registerEmail'),
+  registerRole: document.getElementById('registerRole'),
+  registerPassword: document.getElementById('registerPassword'),
+  registerConfirmPassword: document.getElementById('registerConfirmPassword'),
+  showLogin: document.getElementById('showLogin'),
+  showRegister: document.getElementById('showRegister'),
+  authAlert: document.getElementById('authAlert'),
+  authInfo: document.getElementById('authInfo'),
+  logoutButton: document.getElementById('logoutButton'),
+  currentUserText: document.getElementById('currentUserText'),
   themeToggle: document.getElementById('themeToggle'),
   roleButtons: document.querySelectorAll('.role-button'),
+  statusMessage: document.getElementById('statusMessage'),
   views: {
     dashboard: document.getElementById('dashboardView'),
     reporter: document.getElementById('reporterView'),
@@ -65,13 +77,6 @@ const elements = {
   fundingNeeded: document.getElementById('fundingNeeded'),
   dashboardProjects: document.getElementById('dashboardProjects'),
   dashboardProgress: document.getElementById('dashboardProgress'),
-  authOverlay: document.getElementById('authOverlay'),
-  loginForm: document.getElementById('loginForm'),
-  loginUsername: document.getElementById('loginUsername'),
-  loginPassword: document.getElementById('loginPassword'),
-  loginAlert: document.getElementById('loginAlert'),
-  logoutButton: document.getElementById('logoutButton'),
-  currentUserText: document.getElementById('currentUserText'),
   reportForm: document.getElementById('reportForm'),
   reportImage: document.getElementById('reportImage'),
   reportDescription: document.getElementById('reportDescription'),
@@ -101,6 +106,191 @@ function toggleTheme() {
   elements.themeToggle.textContent = next === 'dark' ? '☀️' : '🌙';
 }
 
+function setMessage(node, message, type = 'info') {
+  if (!node) return;
+  node.textContent = message;
+  node.classList.remove('hidden');
+  node.classList.toggle('alert-message', type === 'error');
+  node.classList.toggle('notification', type === 'info');
+}
+
+function hideMessage(node) {
+  if (!node) return;
+  node.textContent = '';
+  node.classList.add('hidden');
+  node.classList.remove('alert-message', 'notification');
+}
+
+async function apiRequest(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  if (state.token) {
+    headers.Authorization = `Bearer ${state.token}`;
+  }
+  const response = await fetch(path, {
+    ...options,
+    headers,
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.message || 'حدث خطأ في الطلب.');
+  }
+  return body;
+}
+
+function showLoginForm() {
+  elements.loginForm.classList.remove('hidden');
+  elements.registerForm.classList.add('hidden');
+  elements.showLogin.classList.add('active');
+  elements.showRegister.classList.remove('active');
+  hideMessage(elements.authAlert);
+  hideMessage(elements.authInfo);
+}
+
+function showRegisterForm() {
+  elements.loginForm.classList.add('hidden');
+  elements.registerForm.classList.remove('hidden');
+  elements.showLogin.classList.remove('active');
+  elements.showRegister.classList.add('active');
+  hideMessage(elements.authAlert);
+  hideMessage(elements.authInfo);
+}
+
+function shouldShowRole(role) {
+  return state.currentUser && (role === 'dashboard' || state.currentUser.role === role);
+}
+
+function applyUserRoleAccess() {
+  elements.roleButtons.forEach((btn) => {
+    if (shouldShowRole(btn.dataset.role)) {
+      btn.classList.remove('hidden');
+    } else {
+      btn.classList.add('hidden');
+    }
+  });
+}
+
+function hideAuthOverlay() {
+  elements.authOverlay.classList.add('hidden');
+  elements.logoutButton.classList.remove('hidden');
+  elements.currentUserText.classList.remove('hidden');
+}
+
+function showAuthOverlay() {
+  elements.authOverlay.classList.remove('hidden');
+  elements.logoutButton.classList.add('hidden');
+  elements.currentUserText.classList.add('hidden');
+  elements.roleButtons.forEach((btn) => btn.classList.remove('hidden'));
+  switchRole('dashboard');
+}
+
+function setSession(token, user) {
+  state.token = token;
+  state.currentUser = user;
+  localStorage.setItem('emaarSession', JSON.stringify({ token, user }));
+  elements.currentUserText.textContent = `مرحباً، ${user.email}`;
+  hideAuthOverlay();
+  applyUserRoleAccess();
+  switchRole(user.role);
+}
+
+function clearSession() {
+  state.token = null;
+  state.currentUser = null;
+  localStorage.removeItem('emaarSession');
+  elements.currentUserText.textContent = '';
+}
+
+function handleConfirmToken() {
+  const params = new URLSearchParams(window.location.search);
+  const confirmationToken = params.get('confirm');
+  if (!confirmationToken) {
+    return;
+  }
+  apiRequest(`/api/confirm?token=${encodeURIComponent(confirmationToken)}`)
+    .then((data) => {
+      setMessage(elements.statusMessage, data.message, 'info');
+    })
+    .catch((error) => {
+      setMessage(elements.statusMessage, error.message || 'فشل تأكيد البريد الإلكتروني.', 'error');
+    })
+    .finally(() => {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    });
+}
+
+async function handleLogin(event) {
+  event.preventDefault();
+  hideMessage(elements.authAlert);
+  hideMessage(elements.authInfo);
+
+  const email = elements.loginEmail.value.trim();
+  const password = elements.loginPassword.value;
+
+  try {
+    const result = await apiRequest('/api/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    setSession(result.token, result.user);
+  } catch (error) {
+    setMessage(elements.authAlert, error.message, 'error');
+  }
+}
+
+async function handleRegister(event) {
+  event.preventDefault();
+  hideMessage(elements.authAlert);
+  hideMessage(elements.authInfo);
+
+  const email = elements.registerEmail.value.trim();
+  const role = elements.registerRole.value;
+  const password = elements.registerPassword.value;
+  const confirmPassword = elements.registerConfirmPassword.value;
+
+  if (password !== confirmPassword) {
+    setMessage(elements.authAlert, 'كلمة المرور وتأكيدها غير متطابقين.', 'error');
+    return;
+  }
+
+  try {
+    const result = await apiRequest('/api/register', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, role }),
+    });
+    setMessage(elements.authInfo, result.message, 'info');
+    if (result.previewUrl) {
+      elements.authInfo.innerHTML += `<p>للاختبار المحلي، يمكنك فتح الرابط الاختباري: <a href="${result.previewUrl}" target="_blank">عرض رسالة البريد</a></p>`;
+    }
+    elements.registerForm.reset();
+  } catch (error) {
+    setMessage(elements.authAlert, error.message, 'error');
+  }
+}
+
+function handleLogout() {
+  clearSession();
+  showAuthOverlay();
+  showLoginForm();
+  setMessage(elements.statusMessage, 'تم تسجيل الخروج بنجاح.', 'info');
+}
+
+function loadSession() {
+  const stored = localStorage.getItem('emaarSession');
+  if (!stored) return false;
+  try {
+    const session = JSON.parse(stored);
+    if (session.token && session.user) {
+      state.token = session.token;
+      state.currentUser = session.user;
+      elements.currentUserText.textContent = `مرحباً، ${session.user.email}`;
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 function switchRole(role) {
   state.role = role;
   elements.roleButtons.forEach((btn) => {
@@ -109,10 +299,10 @@ function switchRole(role) {
   Object.keys(elements.views).forEach((viewKey) => {
     elements.views[viewKey].classList.toggle('hidden', viewKey !== role);
   });
-  if (role === 'reporter') {
+  if (role === 'reporter' && state.reportsMap) {
     setTimeout(() => state.reportsMap.invalidateSize(), 100);
   }
-  if (role === 'investor') {
+  if (role === 'investor' && state.investorMap) {
     setTimeout(() => state.investorMap.invalidateSize(), 100);
   }
 }
@@ -155,8 +345,7 @@ function initMaps() {
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: 'خرائط OpenStreetMap',
   }).addTo(state.reportsMap);
-  const userMarker = L.marker(state.userLocation).addTo(state.reportsMap);
-  userMarker.bindPopup('موقعك الحالي').openPopup();
+  L.marker(state.userLocation).addTo(state.reportsMap).bindPopup('موقعك الحالي').openPopup();
 
   state.investorMap = L.map('investorMap').setView(state.userLocation, 7);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -224,8 +413,10 @@ function loadUserLocation() {
       state.userLocation = [position.coords.latitude, position.coords.longitude];
       elements.latitude.textContent = position.coords.latitude.toFixed(5);
       elements.longitude.textContent = position.coords.longitude.toFixed(5);
-      state.reportsMap.setView(state.userLocation, 11);
-      L.marker(state.userLocation).addTo(state.reportsMap).bindPopup('موقعك الحالي').openPopup();
+      if (state.reportsMap) {
+        state.reportsMap.setView(state.userLocation, 11);
+        L.marker(state.userLocation).addTo(state.reportsMap).bindPopup('موقعك الحالي').openPopup();
+      }
     },
     () => {
       elements.latitude.textContent = state.userLocation[0].toFixed(5);
@@ -262,30 +453,85 @@ function setupReportForm() {
   });
 }
 
-function showLoginAlert(message) {
-  elements.loginAlert.textContent = message;
-  elements.loginAlert.classList.remove('hidden');
+function initAuth() {
+  const hasSession = loadSession();
+  if (hasSession) {
+    applyUserRoleAccess();
+    hideAuthOverlay();
+    switchRole(state.currentUser.role);
+  } else {
+    showAuthOverlay();
+    showLoginForm();
+  }
+
+  elements.loginForm.addEventListener('submit', handleLogin);
+  elements.registerForm.addEventListener('submit', handleRegister);
+  elements.logoutButton.addEventListener('click', handleLogout);
+  elements.showLogin.addEventListener('click', showLoginForm);
+  elements.showRegister.addEventListener('click', showRegisterForm);
 }
 
-function hideLoginAlert() {
-  elements.loginAlert.classList.add('hidden');
+function handleLogin(event) {
+  event.preventDefault();
+  hideMessage(elements.authAlert);
+  hideMessage(elements.authInfo);
+
+  const email = elements.loginEmail.value.trim();
+  const password = elements.loginPassword.value;
+
+  apiRequest('/api/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+    .then((result) => setSession(result.token, result.user))
+    .catch((error) => setMessage(elements.authAlert, error.message, 'error'));
 }
 
-function setCurrentUser(user) {
-  state.currentUser = user;
-  elements.currentUserText.textContent = `مرحباً، ${user.name}`;
-  elements.currentUserText.classList.remove('hidden');
-  localStorage.setItem('emaarUser', JSON.stringify(user));
+function handleRegister(event) {
+  event.preventDefault();
+  hideMessage(elements.authAlert);
+  hideMessage(elements.authInfo);
+
+  const email = elements.registerEmail.value.trim();
+  const role = elements.registerRole.value;
+  const password = elements.registerPassword.value;
+  const confirmPassword = elements.registerConfirmPassword.value;
+
+  if (password !== confirmPassword) {
+    setMessage(elements.authAlert, 'كلمة المرور وتأكيدها غير متطابقين.', 'error');
+    return;
+  }
+
+  apiRequest('/api/register', {
+    method: 'POST',
+    body: JSON.stringify({ email, password, role }),
+  })
+    .then((result) => {
+      setMessage(elements.authInfo, result.message, 'info');
+      if (result.previewUrl) {
+        elements.authInfo.innerHTML += `<p>للاختبار المحلي، افتح الرابط: <a href="${result.previewUrl}" target="_blank">عرض البريد</a></p>`;
+      }
+      elements.registerForm.reset();
+    })
+    .catch((error) => setMessage(elements.authAlert, error.message, 'error'));
+}
+
+function handleLogout() {
+  clearSession();
+  showAuthOverlay();
+  showLoginForm();
+  setMessage(elements.statusMessage, 'تم تسجيل الخروج بنجاح.', 'info');
 }
 
 function loadSession() {
-  const stored = localStorage.getItem('emaarUser');
+  const stored = localStorage.getItem('emaarSession');
   if (!stored) return false;
   try {
-    const user = JSON.parse(stored);
-    const validUser = state.users.find((item) => item.username === user.username && item.role === user.role);
-    if (validUser) {
-      setCurrentUser(validUser);
+    const session = JSON.parse(stored);
+    if (session.token && session.user) {
+      state.token = session.token;
+      state.currentUser = session.user;
+      elements.currentUserText.textContent = `مرحباً، ${session.user.email}`;
       return true;
     }
   } catch {
@@ -294,65 +540,18 @@ function loadSession() {
   return false;
 }
 
-function applyUserRoleAccess() {
-  elements.roleButtons.forEach((btn) => {
-    if (btn.dataset.role === 'dashboard' || btn.dataset.role === state.currentUser.role) {
-      btn.classList.remove('hidden');
-    } else {
-      btn.classList.add('hidden');
-    }
-  });
-}
-
-function hideAuthOverlay() {
-  elements.authOverlay.classList.add('hidden');
-  elements.logoutButton.classList.remove('hidden');
-}
-
-function showAuthOverlay() {
-  elements.authOverlay.classList.remove('hidden');
-  elements.logoutButton.classList.add('hidden');
-  elements.currentUserText.classList.add('hidden');
-  elements.roleButtons.forEach((btn) => btn.classList.remove('hidden'));
-  switchRole('dashboard');
-}
-
-function handleLogin(event) {
-  event.preventDefault();
-  hideLoginAlert();
-  const username = elements.loginUsername.value.trim();
-  const password = elements.loginPassword.value;
-  const user = state.users.find((item) => item.username === username && item.password === password);
-  if (!user) {
-    showLoginAlert('بيانات الدخول غير صحيحة، حاول مرة أخرى.');
+function handleConfirmToken() {
+  const params = new URLSearchParams(window.location.search);
+  const confirmationToken = params.get('confirm');
+  if (!confirmationToken) {
     return;
   }
-  setCurrentUser(user);
-  applyUserRoleAccess();
-  hideAuthOverlay();
-  switchRole(user.role);
-}
-
-function handleLogout() {
-  localStorage.removeItem('emaarUser');
-  state.currentUser = null;
-  elements.loginUsername.value = '';
-  elements.loginPassword.value = '';
-  hideLoginAlert();
-  showAuthOverlay();
-}
-
-function initAuth() {
-  const hasSession = loadSession();
-  if (hasSession) {
-    applyUserRoleAccess();
-    switchRole(state.currentUser.role);
-    hideAuthOverlay();
-  } else {
-    showAuthOverlay();
-  }
-  elements.loginForm.addEventListener('submit', handleLogin);
-  elements.logoutButton.addEventListener('click', handleLogout);
+  apiRequest(`/api/confirm?token=${encodeURIComponent(confirmationToken)}`)
+    .then((data) => setMessage(elements.statusMessage, data.message, 'info'))
+    .catch((error) => setMessage(elements.statusMessage, error.message, 'error'))
+    .finally(() => {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    });
 }
 
 function init() {
@@ -363,6 +562,7 @@ function init() {
   renderContractorProjects();
   loadUserLocation();
   setupReportForm();
+  handleConfirmToken();
   initAuth();
 
   elements.themeToggle.addEventListener('click', toggleTheme);

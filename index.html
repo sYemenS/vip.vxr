@@ -11,28 +11,41 @@
   <div class="app-shell">
     <div class="auth-overlay" id="authOverlay">
       <div class="auth-card">
-        <h2>تسجيل الدخول إلى إعمار وبنيان</h2>
-        <p>استخدم بيانات تجريبية للولوج إلى واجهة المواطن، المتبرع، أو المقاول.</p>
+        <div class="auth-tabs">
+          <button id="showLogin" class="auth-tab active">دخول</button>
+          <button id="showRegister" class="auth-tab">تسجيل حساب</button>
+        </div>
 
-        <form id="loginForm" class="form-card">
-          <label for="loginUsername">اسم المستخدم</label>
-          <input id="loginUsername" type="text" placeholder="مثال: investor1" autocomplete="username" />
-          <label for="loginPassword">كلمة المرور</label>
-          <input id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password" />
+        <form id="loginForm" class="form-card auth-form">
+          <label>البريد الإلكتروني</label>
+          <input id="loginEmail" type="email" placeholder="hello@example.com" autocomplete="email" required />
+          <label>كلمة المرور</label>
+          <input id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password" required />
           <div class="auth-actions">
             <button type="submit" class="primary-btn">دخول</button>
           </div>
-          <div id="loginAlert" class="alert-message hidden"></div>
         </form>
 
-        <div class="auth-hint">
-          <strong>حسابات تجريبية</strong>
-          <ul>
-            <li>المواطن: reporter1 / reporter123</li>
-            <li>المتبرع: investor1 / investor123</li>
-            <li>المقاول: contractor1 / contractor123</li>
-          </ul>
-        </div>
+        <form id="registerForm" class="form-card auth-form hidden">
+          <label>البريد الإلكتروني</label>
+          <input id="registerEmail" type="email" placeholder="hello@example.com" autocomplete="email" required />
+          <label>الدور</label>
+          <select id="registerRole" required>
+            <option value="reporter">المواطن</option>
+            <option value="investor">المتبرع</option>
+            <option value="contractor">المقاول</option>
+          </select>
+          <label>كلمة المرور</label>
+          <input id="registerPassword" type="password" placeholder="••••••••" autocomplete="new-password" required />
+          <label>تأكيد كلمة المرور</label>
+          <input id="registerConfirmPassword" type="password" placeholder="••••••••" autocomplete="new-password" required />
+          <div class="auth-actions">
+            <button type="submit" class="primary-btn">إنشاء حساب</button>
+          </div>
+        </form>
+
+        <div id="authAlert" class="alert-message hidden"></div>
+        <div id="authInfo" class="auth-info hidden"></div>
       </div>
     </div>
 
@@ -48,6 +61,8 @@
         <button id="themeToggle" class="icon-btn" aria-label="تبديل الوضع الليلي والنهاري">🌙</button>
       </div>
     </header>
+
+    <div id="statusMessage" class="notification hidden"></div>
 
     <section class="role-nav cards-row">
       <button class="role-button active" data-role="dashboard">لوحة التحكم</button>
