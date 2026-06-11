@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "364306726946",
+    "project_id": "alyhrr-9b0dc",
+    "storage_bucket": "alyhrr-9b0dc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:364306726946:android:e908288cfec1ad5f840a7b",
+        "android_client_info": {
+          "package_name": "alyhrr.my"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "364306726946-75pajmo403pc6r94tgrs6i46f55cngv1.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB0YSqBOD2LDSE-HL7rA3BWxNozR69QtAo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "364306726946-75pajmo403pc6r94tgrs6i46f55cngv1.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
